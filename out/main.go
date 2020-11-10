@@ -10,30 +10,25 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	resource "github.com/cioplenu/concourse-nomad-resource"
+	"github.com/cioplenu/concourse-nomad-resource/common"
 )
 
-type SourceConfig struct {
-	URL   string `json:"url"`
-	Name  string `json:"name"`
-	Token string `json:"token"`
-}
-
-type ParamsConfig struct {
+type Params struct {
 	JobPath  string            `json:"job_path"`
 	Vars     map[string]string `json:"vars"`
 	VarFiles map[string]string `json:"var_files"`
 }
 
 type OutConfig struct {
-	Source SourceConfig `json:"source"`
-	Params ParamsConfig `json:"params"`
+	Source resource.Source `json:"source"`
+	Params Params          `json:"params"`
 }
 
-func check(err error, msg string) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, msg+": %s\n", err)
-		os.Exit(1)
-	}
+type Response struct {
+	Version  resource.Version  `json:"version"`
+	Metadata resource.Metadata `json:"metadata"`
 }
 
 func main() {
@@ -45,31 +40,31 @@ func main() {
 
 	var config OutConfig
 	err := json.NewDecoder(os.Stdin).Decode(&config)
-	check(err, "Error parsing configuration")
+	common.Check(err, "Error parsing configuration")
 
 	templPath := filepath.Join(sourceDir, config.Params.JobPath)
 	templFile, err := ioutil.ReadFile(templPath)
-	check(err, "Could not read input file "+templPath)
+	common.Check(err, "Could not read input file "+templPath)
 	tmpl, err := template.New("job").Parse(string(templFile))
-	check(err, "Error parsing template")
+	common.Check(err, "Error parsing template")
 
 	for name, path := range config.Params.VarFiles {
 		varPath := filepath.Join(sourceDir, path)
 		varFile, err := ioutil.ReadFile(varPath)
-		check(err, "Error reading var file")
+		common.Check(err, "Error reading var file")
 		config.Params.Vars[name] = strings.TrimSpace(string(varFile))
 	}
 
 	buf := new(bytes.Buffer)
 
 	err = tmpl.Execute(buf, config.Params.Vars)
-	check(err, "Error executing template")
+	common.Check(err, "Error executing template")
 
 	outFile, err := os.Create(templPath)
-	check(err, "Error creating output file")
+	common.Check(err, "Error creating output file")
 	defer outFile.Close()
 	_, err = outFile.Write(buf.Bytes())
-	check(err, "Error writing output file")
+	common.Check(err, "Error writing output file")
 
 	cmd := exec.Command(
 		"nomad",
@@ -89,5 +84,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println(out.String())
+	fmt.Fprint(os.Stderr, out.String())
+
+	cmd = exec.Command(
+		"nomad",
+		"job",
+		"history",
+		"-json",
+		"-address="+config.Source.URL,
+		"-token="+config.Source.Token,
+		config.Source.Name,
+	)
+	var histResp bytes.Buffer
+	cmd.Stdout = &histResp
+	err = cmd.Run()
+	common.Check(err, "Error checking versions")
+
+	var history []resource.JobVersion
+	json.Unmarshal(histResp.Bytes(), &history)
+
+	response := Response{
+		Version: resource.Version{
+			Version: history[0].Version,
+		},
+	}
+
+	json.NewEncoder(os.Stdout).Encode(response)
 }
