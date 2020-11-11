@@ -86,22 +86,7 @@ func main() {
 
 	fmt.Fprint(os.Stderr, out.String())
 
-	cmd = exec.Command(
-		"nomad",
-		"job",
-		"history",
-		"-json",
-		"-address="+config.Source.URL,
-		"-token="+config.Source.Token,
-		config.Source.Name,
-	)
-	var histResp bytes.Buffer
-	cmd.Stdout = &histResp
-	err = cmd.Run()
-	common.Check(err, "Error checking versions")
-
-	var history []resource.JobVersion
-	json.Unmarshal(histResp.Bytes(), &history)
+	history := common.GetHistory(config.Source)
 
 	response := Response{
 		Version: resource.Version{
