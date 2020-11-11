@@ -3,7 +3,8 @@ FROM golang:alpine AS build
 WORKDIR /tmp/nomad-resource
 COPY . .
 
-RUN go build -o dist/out out/main.go
+RUN go build -o dist/out out/main.go && \
+    go build -o dist/in in/main.go
 
 FROM alpine:edge
 
