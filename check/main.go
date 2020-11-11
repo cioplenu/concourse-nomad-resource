@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"sort"
 
 	resource "github.com/cioplenu/concourse-nomad-resource"
 	"github.com/cioplenu/concourse-nomad-resource/common"
@@ -21,16 +22,19 @@ func main() {
 	lastVersion := request.Version.Version
 
 	history := common.GetHistory(request.Source)
+	sort.Sort(history) // Nomad provides history from newest to oldest
 	versions := make([]resource.Version, 0)
 
-	for _, jobVersion := range history {
+	for i, jobVersion := range history {
+		// Only return the current version and newer ones
 		if lastVersion != 0 && lastVersion > jobVersion.Version {
 			continue
 		}
-		versions = append(versions, resource.Version{jobVersion.Version})
-		if lastVersion == 0 {
-			break
+		// If no version was provided return only the latest
+		if lastVersion == 0 && i < len(history)-1 {
+			continue
 		}
+		versions = append(versions, resource.Version{jobVersion.Version})
 	}
 
 	json.NewEncoder(os.Stdout).Encode(versions)

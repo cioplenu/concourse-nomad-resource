@@ -17,7 +17,7 @@ func Check(err error, msg string) {
 	}
 }
 
-func GetHistory(source resource.Source) []resource.JobVersion {
+func GetHistory(source resource.Source) resource.History {
 	cmd := exec.Command(
 		"nomad",
 		"job",
